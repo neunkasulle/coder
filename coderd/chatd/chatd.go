@@ -2102,6 +2102,22 @@ func (p *Server) runChat(
 		prompt = chatprompt.InsertSystem(prompt, defaultSubagentInstruction)
 	}
 
+	// Detect computer-use subagent by scanning system messages
+	// for the sentinel string.
+	isComputerUse := false
+	for _, msg := range messages {
+		if msg.Role == string(fantasy.MessageRoleSystem) {
+			var content string
+			if msg.Content.Valid {
+				content = string(msg.Content.RawMessage)
+			}
+			if strings.Contains(content, computerUseSentinel) {
+				isComputerUse = true
+				break
+			}
+		}
+	}
+
 	// NOTE: Buffering was already started in processChat before
 	// the running status was published, so message_part events
 	// are captured from the moment subscribers can see
@@ -2388,6 +2404,19 @@ func (p *Server) runChat(
 		},
 	}
 
+	if isComputerUse {
+		// Override model for computer use subagent.
+		cuModel, cuErr := chatprovider.ModelFromConfig(
+			ComputerUseModelProvider,
+			ComputerUseModelName,
+			providerKeys,
+		)
+		if cuErr != nil {
+			return xerrors.Errorf("resolve computer use model: %w", cuErr)
+		}
+		model = cuModel
+	}
+
 	// Here are all the tools we have for the chat.
 	tools := []fantasy.AgentTool{
 		chattool.ReadFile(chattool.ReadFileOptions{
@@ -2447,6 +2476,29 @@ func (p *Server) runChat(
 		tools = append(tools, p.subagentTools(func() database.Chat {
 			return chat
 		})...)
+	}
+
+	if isComputerUse {
+		// Get workspace connection to determine display dimensions.
+		wConn, wErr := getWorkspaceConn(ctx)
+		if wErr != nil {
+			return xerrors.Errorf("get workspace conn for computer use: %w", wErr)
+		}
+		// Take an initial screenshot to determine native resolution.
+		// Use 0,0 to get native dimensions.
+		initialScreenshot, sErr := wConn.Screenshot(ctx, 0, 0)
+		if sErr != nil {
+			// Default to 1920x1080 if we can't get dimensions.
+			logger.Warn(ctx, "failed to get display dimensions, using defaults",
+				slog.Error(sErr))
+			tools = append(tools, NewComputerUseTool(1920, 1080, getWorkspaceConn))
+		} else {
+			tools = append(tools, NewComputerUseTool(
+				initialScreenshot.Width,
+				initialScreenshot.Height,
+				getWorkspaceConn,
+			))
+		}
 	}
 
 	err = chatloop.Run(ctx, chatloop.RunOptions{

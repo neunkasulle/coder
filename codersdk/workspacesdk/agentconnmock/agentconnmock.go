@@ -142,6 +142,51 @@ func (mr *MockAgentConnMockRecorder) DeleteDevcontainer(ctx, devcontainerID any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDevcontainer", reflect.TypeOf((*MockAgentConn)(nil).DeleteDevcontainer), ctx, devcontainerID)
 }
 
+// Desktop mocks base method.
+func (m *MockAgentConn) Desktop(ctx context.Context) (net.Conn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Desktop", ctx)
+	ret0, _ := ret[0].(net.Conn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Desktop indicates an expected call of Desktop.
+func (mr *MockAgentConnMockRecorder) Desktop(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Desktop", reflect.TypeOf((*MockAgentConn)(nil).Desktop), ctx)
+}
+
+// ComputerAction mocks base method.
+func (m *MockAgentConn) ComputerAction(ctx context.Context, action workspacesdk.ComputerAction) (workspacesdk.ComputerActionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ComputerAction", ctx, action)
+	ret0, _ := ret[0].(workspacesdk.ComputerActionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ComputerAction indicates an expected call of ComputerAction.
+func (mr *MockAgentConnMockRecorder) ComputerAction(ctx, action any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputerAction", reflect.TypeOf((*MockAgentConn)(nil).ComputerAction), ctx, action)
+}
+
+// Screenshot mocks base method.
+func (m *MockAgentConn) Screenshot(ctx context.Context, targetWidth, targetHeight int) (workspacesdk.ScreenshotResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Screenshot", ctx, targetWidth, targetHeight)
+	ret0, _ := ret[0].(workspacesdk.ScreenshotResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Screenshot indicates an expected call of Screenshot.
+func (mr *MockAgentConnMockRecorder) Screenshot(ctx, targetWidth, targetHeight any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Screenshot", reflect.TypeOf((*MockAgentConn)(nil).Screenshot), ctx, targetWidth, targetHeight)
+}
+
 // DialContext mocks base method.
 func (m *MockAgentConn) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	m.ctrl.T.Helper()

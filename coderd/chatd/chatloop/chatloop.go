@@ -805,6 +805,14 @@ func persistInterruptedStep(
 	}
 }
 
+// ToolDefiner is an optional interface that AgentTools can
+// implement to control how they appear in Call.Tools. When
+// present, buildToolDefinitions uses the returned Tool instead
+// of constructing a FunctionTool from Info().
+type ToolDefiner interface {
+	ToolDefinition() fantasy.Tool
+}
+
 // buildToolDefinitions converts AgentTool definitions into the
 // fantasy.Tool slice expected by fantasy.Call. When activeTools
 // is non-empty, only tools whose name appears in the list are
@@ -816,6 +824,14 @@ func buildToolDefinitions(tools []fantasy.AgentTool, activeTools []string) []fan
 		if len(activeTools) > 0 && !slices.Contains(activeTools, info.Name) {
 			continue
 		}
+
+		// If the tool implements ToolDefiner, use the custom
+		// definition directly instead of building a FunctionTool.
+		if definer, ok := tool.(ToolDefiner); ok {
+			prepared = append(prepared, definer.ToolDefinition())
+			continue
+		}
+
 		inputSchema := map[string]any{
 			"type":       "object",
 			"properties": info.Parameters,

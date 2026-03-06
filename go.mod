@@ -1,6 +1,6 @@
 module github.com/coder/coder/v2
 
-go 1.25.7
+go 1.26.0
 
 // Required until a v3 of chroma is created to lazily initialize all XML files.
 // None of our dependencies seem to use the registries anyways, so this
@@ -75,8 +75,8 @@ replace github.com/spf13/afero => github.com/aslilac/afero v0.0.0-20250403163713
 // Forked for two reasons:
 // 1) Adds thinking effort to Anthropic provider
 // 2) Downgraded to Go 1.25 due to issue with Windows CI
-// https://github.com/kylecarbs/fantasy/compare/main...kylecarbs:fantasy:cj/go1.25
-replace charm.land/fantasy => github.com/kylecarbs/fantasy v0.0.0-20260225152134-45ae0791c21f
+// https://github.com/hugodutka/fantasy — fork with Anthropic computer use support
+replace charm.land/fantasy => github.com/hugodutka/fantasy v0.0.0-20260310103256-242e3d156af6
 
 replace github.com/charmbracelet/anthropic-sdk-go => github.com/kylecarbs/anthropic-sdk-go v0.0.0-20260223140439-63879b0b8dab
 
@@ -529,7 +529,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
-	github.com/charmbracelet/anthropic-sdk-go v0.0.0-20251024181547-21d6f3d9a904 // indirect
+	github.com/charmbracelet/anthropic-sdk-go v0.0.0-20260223140439-63879b0b8dab // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250904123553-b4e2667e5ad5 // indirect
 	github.com/charmbracelet/x/json v0.2.0 // indirect
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
@@ -558,10 +558,10 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
-	github.com/kaptinlin/go-i18n v0.2.4 // indirect
-	github.com/kaptinlin/jsonpointer v0.4.10 // indirect
-	github.com/kaptinlin/jsonschema v0.6.10 // indirect
-	github.com/kaptinlin/messageformat-go v0.4.10 // indirect
+	github.com/kaptinlin/go-i18n v0.2.11 // indirect
+	github.com/kaptinlin/jsonpointer v0.4.16 // indirect
+	github.com/kaptinlin/jsonschema v0.7.3 // indirect
+	github.com/kaptinlin/messageformat-go v0.4.18 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/landlock-lsm/go-landlock v0.0.0-20251103212306-430f8e5cd97c // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect

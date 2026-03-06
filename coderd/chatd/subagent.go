@@ -20,9 +20,16 @@ var ErrSubagentNotDescendant = xerrors.New("target chat is not a descendant of c
 const (
 	subagentAwaitPollInterval  = 200 * time.Millisecond
 	defaultSubagentWaitTimeout = 5 * time.Minute
+
+	computerUseSentinel = "[COMPUTER_USE_AGENT]"
 )
 
 type spawnAgentArgs struct {
+	Prompt string `json:"prompt"`
+	Title  string `json:"title,omitempty"`
+}
+
+type spawnComputerUseAgentArgs struct {
 	Prompt string `json:"prompt"`
 	Title  string `json:"title,omitempty"`
 }
@@ -75,6 +82,81 @@ func (p *Server) subagentTools(currentChat func() database.Chat) []fantasy.Agent
 					args.Prompt,
 					args.Title,
 				)
+				if err != nil {
+					return fantasy.NewTextErrorResponse(err.Error()), nil
+				}
+
+				return toolJSONResponse(map[string]any{
+					"chat_id": childChat.ID.String(),
+					"title":   childChat.Title,
+					"status":  string(childChat.Status),
+				}), nil
+			},
+		),
+		fantasy.NewAgentTool(
+			"spawn_computer_use_agent",
+			"Spawn a dedicated computer use agent that can see the desktop "+
+				"(take screenshots) and interact with it (mouse, keyboard, "+
+				"scroll). The agent runs on a model optimized for computer "+
+				"use and has the same workspace tools as a standard subagent "+
+				"plus the native Anthropic computer tool. Use this for tasks "+
+				"that require visual interaction with a desktop GUI (e.g. "+
+				"browser automation, GUI testing, visual inspection). After "+
+				"spawning, use wait_agent to collect the result.",
+			func(ctx context.Context, args spawnComputerUseAgentArgs, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+				if currentChat == nil {
+					return fantasy.NewTextErrorResponse("subagent callbacks are not configured"), nil
+				}
+
+				parent := currentChat()
+				if parent.ParentChatID.Valid {
+					return fantasy.NewTextErrorResponse("delegated chats cannot create child subagents"), nil
+				}
+
+				parent, err := p.db.GetChatByID(ctx, parent.ID)
+				if err != nil {
+					return fantasy.NewTextErrorResponse(err.Error()), nil
+				}
+
+				prompt := strings.TrimSpace(args.Prompt)
+				if prompt == "" {
+					return fantasy.NewTextErrorResponse("prompt is required"), nil
+				}
+
+				title := strings.TrimSpace(args.Title)
+				if title == "" {
+					title = subagentFallbackChatTitle(prompt)
+				}
+
+				rootChatID := parent.ID
+				if parent.RootChatID.Valid {
+					rootChatID = parent.RootChatID.UUID
+				}
+				if parent.LastModelConfigID == uuid.Nil {
+					return fantasy.NewTextErrorResponse("parent chat model config id is required"), nil
+				}
+
+				// Create the child chat with the computer use sentinel
+				// in its system prompt. This signals runChat to use the
+				// predefined computer use model and include the
+				// computer tool.
+				systemPrompt := computerUseSentinel + "\n\n" + prompt
+				childChat, err := p.CreateChat(ctx, CreateOptions{
+					OwnerID:     parent.OwnerID,
+					WorkspaceID: parent.WorkspaceID,
+					ParentChatID: uuid.NullUUID{
+						UUID:  parent.ID,
+						Valid: true,
+					},
+					RootChatID: uuid.NullUUID{
+						UUID:  rootChatID,
+						Valid: true,
+					},
+					ModelConfigID:      parent.LastModelConfigID,
+					Title:              title,
+					SystemPrompt:       systemPrompt,
+					InitialUserContent: []fantasy.Content{fantasy.TextContent{Text: prompt}},
+				})
 				if err != nil {
 					return fantasy.NewTextErrorResponse(err.Error()), nil
 				}
