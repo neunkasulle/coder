@@ -9114,6 +9114,8 @@ func TestGetChatMessagesForPromptByChatID(t *testing.T) {
 		require.NotContains(t, gotIDs, compressedTool.ID,
 			"compressed tool result must not be included")
 		require.Contains(t, gotIDs, postUser.ID)
+	})
+}
 
 func TestGetWorkspaceBuildMetricsByResourceID(t *testing.T) {
 	t.Parallel()
@@ -9159,7 +9161,7 @@ func TestGetWorkspaceBuildMetricsByResourceID(t *testing.T) {
 		return fixture{db: db, resourceID: resource.ID}
 	}
 
-	t.Run("Basic", func(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 		f := setupFixture(t)
 
@@ -9174,7 +9176,7 @@ func TestGetWorkspaceBuildMetricsByResourceID(t *testing.T) {
 		row, err := f.db.GetWorkspaceBuildMetricsByResourceID(context.Background(), f.resourceID)
 		require.NoError(t, err)
 		require.True(t, row.AllAgentsReady)
-		require.WithinDuration(t, parentReadyAt, row.LastAgentReadyAt, time.Second)
+		require.True(t, parentReadyAt.Equal(row.LastAgentReadyAt), "expected LastAgentReadyAt to equal parentReadyAt")
 		require.Equal(t, "success", row.WorstStatus)
 	})
 
@@ -9206,7 +9208,7 @@ func TestGetWorkspaceBuildMetricsByResourceID(t *testing.T) {
 		row, err := f.db.GetWorkspaceBuildMetricsByResourceID(context.Background(), f.resourceID)
 		require.NoError(t, err)
 		require.True(t, row.AllAgentsReady)
-		require.WithinDuration(t, parentReadyAt, row.LastAgentReadyAt, time.Second)
+		require.True(t, parentReadyAt.Equal(row.LastAgentReadyAt), "expected LastAgentReadyAt to equal parentReadyAt")
 		require.Equal(t, "success", row.WorstStatus)
 	})
 }
