@@ -32,6 +32,7 @@ interface SidebarPanelState {
 	hasDiffStatus: boolean;
 	diffStatus: ChatDiffStatusResponse | undefined;
 	hasGitRepos: boolean;
+	hasDesktop: boolean;
 	gitRepoCount: number;
 	gitRepositories: ReadonlyMap<string, TypesGen.WorkspaceAgentRepoChanges>;
 	showSidebarPanel: boolean;
@@ -231,7 +232,7 @@ export const AgentDetailTopBar: FC<AgentDetailTopBarProps> = ({
 						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
-				{(diff.hasDiffStatus || diff.hasGitRepos) && (
+				{(diff.hasDiffStatus || diff.hasGitRepos || diff.hasDesktop) && (
 					<Button
 						variant="subtle"
 						size="icon"

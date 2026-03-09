@@ -7,6 +7,7 @@ import {
 	Columns2Icon,
 	MaximizeIcon,
 	MinimizeIcon,
+	MonitorIcon,
 	PanelLeftIcon,
 	Rows3Icon,
 	XIcon,
@@ -23,10 +24,12 @@ import {
 } from "react";
 import { cn } from "utils/cn";
 import type { ChatMessageInputRef } from "./AgentChatInput";
+import { DesktopPanel } from "./DesktopPanel";
 import { DiffStatBadge } from "./DiffStats";
 import { DIFF_STYLE_KEY, type DiffStyle, loadDiffStyle } from "./DiffViewer";
 import { FilesChangedPanel } from "./FilesChangedPanel";
 import { RepoChangesPanel } from "./RepoChangesPanel";
+import type { UseDesktopConnectionResult } from "./useDesktopConnection";
 
 interface SidebarTabViewProps {
 	/** PR tab data. Omitted if no PR is associated. */
@@ -61,6 +64,8 @@ interface SidebarTabViewProps {
 	onClose?: () => void;
 	/** Ref to the chat input, forwarded to FilesChangedPanel. */
 	chatInputRef?: RefObject<ChatMessageInputRef | null>;
+	/** Desktop connection state. Omitted if desktop is not available. */
+	desktopConnection?: UseDesktopConnectionResult;
 }
 
 /** How far (px) each chevron click scrolls the tab strip. */
@@ -160,6 +165,7 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 	diffStatus,
 	onClose,
 	chatInputRef,
+	desktopConnection,
 }) => {
 	const tabIdPrefix = useId();
 	const repoEntries = Array.from(repositories.entries()).sort(([a], [b]) =>
@@ -169,14 +175,15 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 	const hasPR = Boolean(prTab);
 	const hasRepos = repoEntries.length > 0;
 
-	// Default active tab: PR if present, otherwise first repo.
+	// Default active tab: PR if present, then first repo, then desktop.
 	const defaultTab = hasPR
 		? "pr"
 		: repoEntries.length > 0
 			? repoEntries[0][0]
-			: null;
-
-	const [activeTab, setActiveTab] = useState<string | null>(defaultTab);
+			: desktopConnection
+				? "desktop"
+				: null; // null means "no explicit user selection" — always follow defaultTab.
+	const [activeTab, setActiveTab] = useState<string | null>(null);
 
 	const [diffStyle, setDiffStyle] = useState<DiffStyle>(loadDiffStyle);
 	const handleSetDiffStyle = useCallback((style: DiffStyle) => {
@@ -184,15 +191,33 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 		localStorage.setItem(DIFF_STYLE_KEY, style);
 	}, []);
 
-	// Derive the effective tab inline to avoid a one-frame flash when
-	// activeTab is stale or null but a valid default exists.
+	// If the user has explicitly selected a tab, validate it against the
+	// current props.  Otherwise fall through to defaultTab which is
+	// re-computed every render from the latest props.
 	const effectiveTab =
 		activeTab !== null &&
-		(activeTab === "pr" ? hasPR : repositories.has(activeTab))
+		(activeTab === "pr"
+			? hasPR
+			: activeTab === "desktop"
+				? Boolean(desktopConnection)
+				: repositories.has(activeTab))
 			? activeTab
 			: defaultTab;
 
-	// Compute diff stats for all repo tabs and cache them.
+	// Auto-connect when the desktop tab becomes active, whether by
+	// user click or because it was selected as the default tab.
+	// Only trigger on "idle" so errors don't cause an infinite
+	// retry loop (the Reconnect button handles that case).
+	const desktopStatus = desktopConnection?.status;
+	useEffect(() => {
+		if (
+			effectiveTab === "desktop" &&
+			desktopConnection &&
+			desktopStatus === "idle"
+		) {
+			desktopConnection.connect();
+		}
+	}, [effectiveTab, desktopConnection, desktopStatus]); // Compute diff stats for all repo tabs and cache them.
 	const repoDiffStats = useMemo(() => {
 		const statsMap = new Map<
 			string,
@@ -210,7 +235,7 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 
 	const tabScroll = useTabScroll();
 
-	if (!hasPR && !hasRepos) {
+	if (!hasPR && !hasRepos && !desktopConnection) {
 		return (
 			<div className="flex h-full min-w-0 flex-col overflow-hidden bg-surface-primary">
 				{/* Tab bar – always visible for the expand button. */}
@@ -334,6 +359,26 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 								</Button>
 							);
 						})}
+						{desktopConnection && (
+							<Button
+								id={`${tabIdPrefix}-tab-desktop`}
+								role="tab"
+								aria-selected={effectiveTab === "desktop"}
+								onClick={() => {
+									setActiveTab("desktop");
+									desktopConnection.connect();
+								}}
+								variant="outline"
+								size="lg"
+								className={cn(
+									"shrink-0 h-6 px-3 gap-3 py-0 bg-surface-primary",
+									effectiveTab === "desktop" && "bg-surface-tertiary",
+								)}
+							>
+								<MonitorIcon className="!size-3.5" />
+								Desktop
+							</Button>
+						)}
 					</div>
 					{tabScroll.canScrollRight && (
 						<button
@@ -411,7 +456,12 @@ export const SidebarTabView: FC<SidebarTabViewProps> = ({
 				}
 				className="min-h-0 flex-1"
 			>
-				{effectiveTab === "pr" && prTab ? (
+				{effectiveTab === "desktop" && desktopConnection ? (
+					<DesktopPanel
+						desktopConnection={desktopConnection}
+						isExpanded={isExpanded}
+					/>
+				) : effectiveTab === "pr" && prTab ? (
 					<FilesChangedPanel
 						chatId={prTab.chatId}
 						isExpanded={isExpanded}

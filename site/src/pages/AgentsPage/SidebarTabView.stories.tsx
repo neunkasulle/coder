@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { WorkspaceAgentRepoChanges } from "api/typesGenerated";
 import { fn } from "storybook/test";
+import { mockAttach, mockDesktopConnection } from "./desktopStoryUtils";
 import { SidebarTabView } from "./SidebarTabView";
 
 const sampleDiff = `--- a/src/index.ts
@@ -139,4 +140,44 @@ export const NarrowPanel: Story = {
 			</div>
 		),
 	],
+};
+
+export const DesktopConnecting: Story = {
+	args: {
+		prTab: undefined,
+		repositories: new Map(),
+		desktopConnection: mockDesktopConnection({ status: "connecting" }),
+	},
+};
+
+export const DesktopConnected: Story = {
+	args: {
+		prTab: undefined,
+		repositories: new Map(),
+		desktopConnection: mockDesktopConnection({
+			status: "connected",
+			hasConnected: true,
+			attach: mockAttach(),
+		}),
+	},
+};
+
+export const DesktopError: Story = {
+	args: {
+		prTab: undefined,
+		repositories: new Map(),
+		desktopConnection: mockDesktopConnection({ status: "error" }),
+	},
+};
+
+export const DesktopWithRepos: Story = {
+	args: {
+		prTab: { prNumber: 42, chatId: "chat-1" },
+		repositories: new Map([["/home/coder/frontend", makeRepo("frontend")]]),
+		desktopConnection: mockDesktopConnection({
+			status: "connected",
+			hasConnected: true,
+			attach: mockAttach(),
+		}),
+	},
 };

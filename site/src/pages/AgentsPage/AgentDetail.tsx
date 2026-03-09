@@ -78,6 +78,7 @@ import {
 } from "./modelOptions";
 import { RightPanel } from "./RightPanel";
 import { SidebarTabView } from "./SidebarTabView";
+import { useDesktopConnection } from "./useDesktopConnection";
 import { useFileAttachments } from "./useFileAttachments";
 import { useGitWatcher } from "./useGitWatcher";
 
@@ -720,6 +721,8 @@ const AgentDetail: FC = () => {
 		agentStatus: workspaceAgent?.status,
 	});
 
+	const desktopConnection = useDesktopConnection({ chatId: agentId });
+
 	// Detect workspace creation so the sidebar can resolve the
 	// workspace and display agent/git info.
 	useWorkspaceCreationWatcher({
@@ -989,8 +992,9 @@ const AgentDetail: FC = () => {
 		workspace && workspaceAgent && sshConfigQuery.data?.hostname_suffix
 			? `ssh ${workspaceAgent.name}.${workspace.name}.${workspace.owner_name}.${sshConfigQuery.data.hostname_suffix}`
 			: undefined;
-	const shouldShowSidebar = (hasDiffStatus || hasGitRepos) && showSidebarPanel;
-
+	const hasDesktop = true;
+	const shouldShowSidebar =
+		(hasDiffStatus || hasGitRepos || hasDesktop) && showSidebarPanel;
 	const generateKeyMutation = useMutation({
 		mutationFn: () => API.getApiKey(),
 	});
@@ -1064,6 +1068,7 @@ const AgentDetail: FC = () => {
 						hasDiffStatus: false,
 						diffStatus: undefined,
 						hasGitRepos: false,
+						hasDesktop: true,
 						gitRepoCount: 0,
 						gitRepositories: new Map(),
 						showSidebarPanel: false,
@@ -1143,6 +1148,7 @@ const AgentDetail: FC = () => {
 						hasDiffStatus: false,
 						diffStatus: undefined,
 						hasGitRepos: false,
+						hasDesktop: true,
 						gitRepoCount: 0,
 						gitRepositories: new Map(),
 						showSidebarPanel: false,
@@ -1194,6 +1200,7 @@ const AgentDetail: FC = () => {
 							hasDiffStatus,
 							diffStatus: diffStatusQuery.data,
 							hasGitRepos,
+							hasDesktop,
 							gitRepoCount: gitWatcher.repositories.size,
 							gitRepositories: gitWatcher.repositories,
 							showSidebarPanel,
@@ -1310,6 +1317,7 @@ const AgentDetail: FC = () => {
 					onToggleSidebarCollapsed={onToggleSidebarCollapsed}
 					chatTitle={chatTitle}
 					diffStatus={diffStatusQuery.data}
+					desktopConnection={desktopConnection}
 					chatInputRef={editing.chatInputRef}
 				/>
 			</RightPanel>

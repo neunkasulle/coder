@@ -1,0 +1,8 @@
+{
+	"$schema": "https://unpkg.com/knip@5/schema-jsonc.json",
+	"ignore": [
+		// Referenced by .storybook/main.ts resolve aliases but not
+		// statically importable, so knip cannot detect the usage.
+		".storybook/noVncMock.js"
+	]
+}
