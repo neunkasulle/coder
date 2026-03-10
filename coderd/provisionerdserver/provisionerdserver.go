@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/maps"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/xerrors"
 	protobuf "google.golang.org/protobuf/proto"
 
@@ -54,6 +55,10 @@ import (
 	sdkproto "github.com/coder/coder/v2/provisionersdk/proto"
 	"github.com/coder/quartz"
 )
+
+// oidcRefreshGroup deduplicates concurrent OIDC token refresh
+// calls for the same user during workspace builds.
+var oidcRefreshGroup singleflight.Group
 
 const (
 	tarMimeType = "application/x-tar"
@@ -3118,37 +3123,56 @@ func ObtainOIDCAccessToken(ctx context.Context, logger slog.Logger, db database.
 	}
 
 	if shouldRefresh, expiresAt := shouldRefreshOIDCToken(link); shouldRefresh {
-		token, err := oidcConfig.TokenSource(ctx, &oauth2.Token{
-			AccessToken:  link.OAuthAccessToken,
-			RefreshToken: link.OAuthRefreshToken,
-			// Use the expiresAt returned by shouldRefreshOIDCToken.
-			// It will force a refresh with an expired time.
-			Expiry: expiresAt,
-		}).Token()
-		if err != nil {
-			// If OIDC fails to refresh, we return an empty string and don't fail.
-			// There isn't a way to hard-opt in to OIDC from a template, so we don't
-			// want to fail builds if users haven't authenticated for a while or something.
-			return "", nil
+		// Use singleflight to deduplicate concurrent refresh attempts
+		// for the same user. Multiple workspace builds for a single
+		// user can race here; only one should hit the identity
+		// provider.
+		type refreshResult struct {
+			link database.UserLink
 		}
-		link.OAuthAccessToken = token.AccessToken
-		link.OAuthRefreshToken = token.RefreshToken
-		link.OAuthExpiry = token.Expiry
+		result, err, _ := oidcRefreshGroup.Do(userID.String(), func() (interface{}, error) {
+			token, err := oidcConfig.TokenSource(ctx, &oauth2.Token{
+				AccessToken:  link.OAuthAccessToken,
+				RefreshToken: link.OAuthRefreshToken,
+				// Use the expiresAt returned by shouldRefreshOIDCToken.
+				// It will force a refresh with an expired time.
+				Expiry: expiresAt,
+			}).Token()
+			if err != nil {
+				// If OIDC fails to refresh, we return an empty
+				// string and don't fail. There isn't a way to
+				// hard-opt in to OIDC from a template, so we
+				// don't want to fail builds if users haven't
+				// authenticated for a while or something.
+				return refreshResult{}, nil
+			}
+			link.OAuthAccessToken = token.AccessToken
+			link.OAuthRefreshToken = token.RefreshToken
+			link.OAuthExpiry = token.Expiry
 
-		link, err = db.UpdateUserLink(ctx, database.UpdateUserLinkParams{
-			UserID:                 userID,
-			LoginType:              database.LoginTypeOIDC,
-			OAuthAccessToken:       link.OAuthAccessToken,
-			OAuthAccessTokenKeyID:  sql.NullString{}, // set by dbcrypt if required
-			OAuthRefreshToken:      link.OAuthRefreshToken,
-			OAuthRefreshTokenKeyID: sql.NullString{}, // set by dbcrypt if required
-			OAuthExpiry:            link.OAuthExpiry,
-			Claims:                 link.Claims,
+			link, err = db.UpdateUserLink(ctx, database.UpdateUserLinkParams{
+				UserID:                 userID,
+				LoginType:              database.LoginTypeOIDC,
+				OAuthAccessToken:       link.OAuthAccessToken,
+				OAuthAccessTokenKeyID:  sql.NullString{}, // set by dbcrypt if required
+				OAuthRefreshToken:      link.OAuthRefreshToken,
+				OAuthRefreshTokenKeyID: sql.NullString{}, // set by dbcrypt if required
+				OAuthExpiry:            link.OAuthExpiry,
+				Claims:                 link.Claims,
+			})
+			if err != nil {
+				return refreshResult{}, xerrors.Errorf("update user link: %w", err)
+			}
+			logger.Info(ctx, "refreshed expired OIDC token for user during workspace build", slog.F("user_id", userID))
+			return refreshResult{link: link}, nil
 		})
 		if err != nil {
-			return "", xerrors.Errorf("update user link: %w", err)
+			return "", err
 		}
-		logger.Info(ctx, "refreshed expired OIDC token for user during workspace build", slog.F("user_id", userID))
+		refreshed, _ := result.(refreshResult)
+		if refreshed.link.OAuthAccessToken != "" {
+			link = refreshed.link
+		}
 	}
 
 	return link.OAuthAccessToken, nil

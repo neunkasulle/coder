@@ -19,6 +19,7 @@ import (
 	"github.com/sqlc-dev/pqtype"
 	"golang.org/x/oauth2"
 	xgithub "golang.org/x/oauth2/github"
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/coderd/database"
@@ -104,6 +105,11 @@ type Config struct {
 	// This field can be nil if unspecified in the config.
 	MCPToolDenyRegex              *regexp.Regexp
 	CodeChallengeMethodsSupported []promoauth.Oauth2PKCEChallengeMethod
+
+	// refreshGroup deduplicates concurrent token refresh calls for the
+	// same user, preventing single-use refresh tokens from being consumed
+	// multiple times in parallel.
+	refreshGroup singleflight.Group
 }
 
 // GenerateTokenExtra generates the extra token data to store in the database.
@@ -139,9 +145,48 @@ func IsInvalidTokenError(err error) bool {
 }
 
 // RefreshToken automatically refreshes the token if expired and permitted.
-// If an error is returned, the token is either invalid, or an error occurred.
-// Use 'IsInvalidTokenError(err)' to determine the difference.
+// It uses singleflight to deduplicate concurrent refresh attempts for the
+// same user. This prevents a race condition where multiple callers read
+// the same single-use refresh token, race to exchange it with the
+// provider, and the loser overwrites the winner's valid new token.
 func (c *Config) RefreshToken(ctx context.Context, db database.Store, externalAuthLink database.ExternalAuthLink) (database.ExternalAuthLink, error) {
+	key := externalAuthLink.UserID.String()
+
+	type result struct {
+		link database.ExternalAuthLink
+		err  error
+	}
+
+	// We pass errors inside the result struct so that singleflight
+	// always treats the call as successful and shares the outcome
+	// with all waiting callers. If we returned the error directly,
+	// singleflight would not share the result.
+	v, _, _ := c.refreshGroup.Do(key, func() (interface{}, error) {
+		// Re-read the link from the database inside the singleflight
+		// callback. A previous in-flight call may have already
+		// refreshed the token, so we need the latest state.
+		freshLink, err := db.GetExternalAuthLink(ctx, database.GetExternalAuthLinkParams{
+			ProviderID: externalAuthLink.ProviderID,
+			UserID:     externalAuthLink.UserID,
+		})
+		if err != nil {
+			return result{externalAuthLink, xerrors.Errorf("get external auth link: %w", err)}, nil
+		}
+		link, err := c.refreshTokenInner(ctx, db, freshLink)
+		return result{link, err}, nil
+	})
+
+	r, ok := v.(result)
+	if !ok {
+		return externalAuthLink, xerrors.New("unexpected singleflight result type")
+	}
+	return r.link, r.err
+}
+
+// refreshTokenInner is the inner implementation of RefreshToken.
+// It performs the actual token refresh without concurrency
+// protection.
+func (c *Config) refreshTokenInner(ctx context.Context, db database.Store, externalAuthLink database.ExternalAuthLink) (database.ExternalAuthLink, error) {
 	// If the token is expired and refresh is disabled, we prompt
 	// the user to authenticate again.
 	if c.NoRefresh &&
@@ -196,6 +241,9 @@ func (c *Config) RefreshToken(ctx context.Context, db database.Store, externalAu
 				UpdatedAt:              dbtime.Now(),
 				ProviderID:             externalAuthLink.ProviderID,
 				UserID:                 externalAuthLink.UserID,
+				// Optimistic lock: only clear the token if it hasn't been
+				// updated by a concurrent caller that won the refresh race.
+				OldOauthRefreshToken: externalAuthLink.OAuthRefreshToken,
 			})
 			if dbExecErr != nil {
 				// This error should be rare.

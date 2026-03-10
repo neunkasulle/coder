@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,7 +62,14 @@ func TestRefreshToken(t *testing.T) {
 		// Expire the link
 		link.OAuthExpiry = expired
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.Error(t, err)
 		require.True(t, externalauth.IsInvalidTokenError(err))
 		require.Contains(t, err.Error(), "refreshing is either disabled or refreshing failed")
@@ -92,7 +101,15 @@ func TestRefreshToken(t *testing.T) {
 
 		// Zero time used
 		link.OAuthExpiry = time.Time{}
-		_, err := config.RefreshToken(ctx, nil, link)
+
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.NoError(t, err)
 		require.True(t, validated, "token should have been validated")
 	})
@@ -106,7 +123,13 @@ func TestRefreshToken(t *testing.T) {
 				},
 			},
 		}
-		_, err := config.RefreshToken(context.Background(), nil, database.ExternalAuthLink{
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), gomock.Any()).Return(database.ExternalAuthLink{
+			OAuthExpiry: expired,
+		}, nil)
+
+		_, err := config.RefreshToken(context.Background(), mDB, database.ExternalAuthLink{
 			OAuthExpiry: expired,
 		})
 		require.Error(t, err)
@@ -133,7 +156,14 @@ func TestRefreshToken(t *testing.T) {
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 		link.OAuthExpiry = expired
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.ErrorContains(t, err, staticError)
 		// Unsure if this should be the correct behavior. It's an invalid token because
 		// 'ValidateToken()' failed with a runtime error. This was the previous behavior,
@@ -174,6 +204,20 @@ func TestRefreshToken(t *testing.T) {
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 		// Expire the link
 		link.OAuthExpiry = expired
+
+		// For the first 4 calls (3 in loop + 1 bad_refresh_token)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil).Times(4)
+
+		// For the last call with empty refresh token
+		emptyRefreshLink := link
+		emptyRefreshLink.OAuthRefreshToken = ""
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(emptyRefreshLink, nil).Times(1)
 
 		// Make the failure a server internal error. Not related to the token
 		// This should be retried since this error is temporary.
@@ -236,7 +280,14 @@ func TestRefreshToken(t *testing.T) {
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 		link.OAuthExpiry = expired
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.ErrorContains(t, err, "token failed to validate")
 		require.True(t, externalauth.IsInvalidTokenError(err))
 		require.True(t, validated, "token should have been attempted to be validated")
@@ -271,7 +322,14 @@ func TestRefreshToken(t *testing.T) {
 		// Unlimited lifetime, this is what GitHub returns tokens as
 		link.OAuthExpiry = time.Time{}
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.NoError(t, err)
 		require.Equal(t, 2, validateCalls, "token should have been attempted to be validated more than once")
 	})
@@ -298,7 +356,14 @@ func TestRefreshToken(t *testing.T) {
 
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
 
-		_, err := config.RefreshToken(ctx, nil, link)
+		ctrl := gomock.NewController(t)
+		mDB := dbmock.NewMockStore(ctrl)
+		mDB.EXPECT().GetExternalAuthLink(gomock.Any(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		}).Return(link, nil)
+
+		_, err := config.RefreshToken(ctx, mDB, link)
 		require.NoError(t, err)
 		require.Equal(t, 1, validateCalls, "token is validated")
 	})
@@ -328,8 +393,18 @@ func TestRefreshToken(t *testing.T) {
 		})
 
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
-		// Force a refresh
+		// Force a refresh — update both the local link and the DB so the
+		// singleflight re-read inside RefreshToken sees the expired token.
 		link.OAuthExpiry = expired
+		_, err := db.UpdateExternalAuthLink(context.Background(), database.UpdateExternalAuthLinkParams{
+			ProviderID:        link.ProviderID,
+			UserID:            link.UserID,
+			UpdatedAt:         link.UpdatedAt,
+			OAuthAccessToken:  link.OAuthAccessToken,
+			OAuthRefreshToken: link.OAuthRefreshToken,
+			OAuthExpiry:       expired,
+		})
+		require.NoError(t, err)
 
 		updated, err := config.RefreshToken(ctx, db, link)
 		require.NoError(t, err)
@@ -343,7 +418,6 @@ func TestRefreshToken(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, updated.OAuthAccessToken, dbLink.OAuthAccessToken, "token is updated in the DB")
 	})
-
 	t.Run("WithExtra", func(t *testing.T) {
 		t.Parallel()
 
@@ -365,8 +439,18 @@ func TestRefreshToken(t *testing.T) {
 		})
 
 		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
-		// Force a refresh
+		// Force a refresh — update both the local link and the DB so the
+		// singleflight re-read inside RefreshToken sees the expired token.
 		link.OAuthExpiry = expired
+		_, err := db.UpdateExternalAuthLink(context.Background(), database.UpdateExternalAuthLinkParams{
+			ProviderID:        link.ProviderID,
+			UserID:            link.UserID,
+			UpdatedAt:         link.UpdatedAt,
+			OAuthAccessToken:  link.OAuthAccessToken,
+			OAuthRefreshToken: link.OAuthRefreshToken,
+			OAuthExpiry:       expired,
+		})
+		require.NoError(t, err)
 
 		updated, err := config.RefreshToken(ctx, db, link)
 		require.NoError(t, err)
@@ -377,6 +461,86 @@ func TestRefreshToken(t *testing.T) {
 		mapping, ok := extra["authed_user"].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, updated.OAuthAccessToken, mapping["access_token"])
+	})
+
+	// ConcurrentRefreshDedup verifies that concurrent RefreshToken calls
+	// for the same user are deduplicated via singleflight. Only one
+	// refresh should hit the IDP; all callers share the result.
+	t.Run("ConcurrentRefreshDedup", func(t *testing.T) {
+		t.Parallel()
+
+		db, _ := dbtestutil.NewDB(t)
+		var refreshCount atomic.Int64
+		fake, config, link := setupOauth2Test(t, testConfig{
+			FakeIDPOpts: []oidctest.FakeIDPOpt{
+				oidctest.WithRefresh(func(_ string) error {
+					refreshCount.Add(1)
+					return nil
+				}),
+				oidctest.WithDynamicUserInfo(func(_ string) (jwt.MapClaims, error) {
+					return jwt.MapClaims{}, nil
+				}),
+			},
+			ExternalAuthOpt: func(cfg *externalauth.Config) {
+				cfg.Type = codersdk.EnhancedExternalAuthProviderGitHub.String()
+			},
+			DB: db,
+		})
+
+		ctx := oidc.ClientContext(context.Background(), fake.HTTPClient(nil))
+
+		// Expire the token in the DB so the singleflight re-read sees it.
+		expiredTime := time.Now().Add(-time.Hour)
+		link.OAuthExpiry = expiredTime
+		_, err := db.UpdateExternalAuthLink(context.Background(), database.UpdateExternalAuthLinkParams{
+			ProviderID:        link.ProviderID,
+			UserID:            link.UserID,
+			UpdatedAt:         link.UpdatedAt,
+			OAuthAccessToken:  link.OAuthAccessToken,
+			OAuthRefreshToken: link.OAuthRefreshToken,
+			OAuthExpiry:       expiredTime,
+		})
+		require.NoError(t, err)
+
+		// Launch N concurrent refreshes for the same user.
+		const numCallers = 5
+		var wg sync.WaitGroup
+		errs := make([]error, numCallers)
+		results := make([]database.ExternalAuthLink, numCallers)
+		wg.Add(numCallers)
+		for i := range numCallers {
+			go func() {
+				defer wg.Done()
+				results[i], errs[i] = config.RefreshToken(ctx, db, link)
+			}()
+		}
+		wg.Wait()
+
+		// All callers should succeed.
+		for i := range numCallers {
+			require.NoError(t, errs[i], "caller %d should not error", i)
+		}
+
+		// The IDP should only have been called once thanks to singleflight.
+		require.Equal(t, int64(1), refreshCount.Load(),
+			"singleflight should deduplicate concurrent refreshes to a single IDP call")
+
+		// All callers should get the same updated token.
+		for i := 1; i < numCallers; i++ {
+			require.Equal(t, results[0].OAuthAccessToken, results[i].OAuthAccessToken,
+				"all callers should receive the same refreshed token")
+		}
+
+		// The DB should have the new token.
+		dbLink, err := db.GetExternalAuthLink(context.Background(), database.GetExternalAuthLinkParams{
+			ProviderID: link.ProviderID,
+			UserID:     link.UserID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, results[0].OAuthAccessToken, dbLink.OAuthAccessToken,
+			"DB should contain the refreshed token")
+		require.NotEqual(t, link.OAuthAccessToken, dbLink.OAuthAccessToken,
+			"DB token should differ from the original expired token")
 	})
 }
 
