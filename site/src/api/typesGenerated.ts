@@ -1245,6 +1245,9 @@ export interface ChatModelAnthropicProviderOptions {
 	readonly thinking?: ChatModelAnthropicThinkingOptions;
 	readonly effort?: string;
 	readonly disable_parallel_tool_use?: boolean;
+	readonly web_search_enabled?: boolean;
+	readonly allowed_domains?: readonly string[];
+	readonly blocked_domains?: readonly string[];
 }
 
 // From codersdk/chats.go
@@ -1296,6 +1299,7 @@ export interface ChatModelGoogleProviderOptions {
 	readonly cached_content?: string;
 	readonly safety_settings?: readonly ChatModelGoogleSafetySetting[];
 	readonly threshold?: string;
+	readonly web_search_enabled?: boolean;
 }
 
 // From codersdk/chats.go
@@ -1352,6 +1356,9 @@ export interface ChatModelOpenAIProviderOptions {
 	readonly service_tier?: string;
 	readonly structured_outputs?: boolean;
 	readonly strict_json_schema?: boolean;
+	readonly web_search_enabled?: boolean;
+	readonly search_context_size?: string;
+	readonly allowed_domains?: readonly string[];
 }
 
 // From codersdk/chats.go
