@@ -150,7 +150,10 @@ func IsInvalidTokenError(err error) bool {
 // the same single-use refresh token, race to exchange it with the
 // provider, and the loser overwrites the winner's valid new token.
 func (c *Config) RefreshToken(ctx context.Context, db database.Store, externalAuthLink database.ExternalAuthLink) (database.ExternalAuthLink, error) {
-	key := externalAuthLink.UserID.String()
+	// The refreshGroup is per-Config (i.e. per-provider), so
+	// keying by userID alone is sufficient. We include the
+	// ProviderID for clarity and defense-in-depth.
+	key := externalAuthLink.ProviderID + ":" + externalAuthLink.UserID.String()
 
 	type result struct {
 		link database.ExternalAuthLink
