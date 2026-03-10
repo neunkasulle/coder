@@ -15337,7 +15337,6 @@ const docTemplate = `{
                 "oauth2",
                 "agents",
                 "mcp-server-http",
-                "workspace-sharing",
                 "ai-template-editor"
             ],
             "x-enum-comments": {
@@ -15349,7 +15348,6 @@ const docTemplate = `{
                 "ExperimentNotifications": "Sends notifications via SMTP and webhooks following certain events.",
                 "ExperimentOAuth2": "Enables OAuth2 provider functionality.",
                 "ExperimentWebPush": "Enables web push notifications through the browser.",
-                "ExperimentWorkspaceSharing": "Enables updating workspace ACLs for sharing with users and groups.",
                 "ExperimentWorkspaceUsage": "Enables the new workspace usage tracking."
             },
             "x-enum-descriptions": [
@@ -15361,7 +15359,6 @@ const docTemplate = `{
                 "Enables OAuth2 provider functionality.",
                 "Enables agent-powered chat functionality.",
                 "Enables the MCP HTTP server functionality.",
-                "Enables updating workspace ACLs for sharing with users and groups.",
                 "Enables the AI assistant in the template editor."
             ],
             "x-enum-varnames": [
@@ -15373,7 +15370,6 @@ const docTemplate = `{
                 "ExperimentOAuth2",
                 "ExperimentAgents",
                 "ExperimentMCPServerHTTP",
-                "ExperimentWorkspaceSharing",
                 "ExperimentAITemplateEditor"
             ]
         },

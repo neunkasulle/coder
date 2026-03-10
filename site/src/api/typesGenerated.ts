@@ -2591,7 +2591,6 @@ export type Experiment =
 	| "notifications"
 	| "oauth2"
 	| "web-push"
-	| "workspace-sharing"
 	| "workspace-usage";
 
 export const Experiments: Experiment[] = [
@@ -2603,7 +2602,6 @@ export const Experiments: Experiment[] = [
 	"notifications",
 	"oauth2",
 	"web-push",
-	"workspace-sharing",
 	"workspace-usage",
 ];
 
